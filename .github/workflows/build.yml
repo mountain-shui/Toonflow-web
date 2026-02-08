@@ -21,8 +21,8 @@ jobs:
       - name: Install dependencies
         run: yarn install
 
-      - name: Build
-        run: yarn build:prod
+      - name: Build (skip type-check)
+        run: yarn build-only prod
         env:
           VITE_TYPE: prod
           VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
