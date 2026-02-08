@@ -1,26 +1,33 @@
-name: Build
+name: Build Vite and Push Dist Image to GHCR
 
 on:
   push:
     branches: [master]
-  workflow_dispatch:
+  workflow_dispatch: # 保留手动触发
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      packages: write  # 推镜像到 GHCR 必需权限
+      contents: read   # 拉取代码必需权限
 
     steps:
+      # 保留你原有的步骤：拉取代码
       - uses: actions/checkout@v4
 
+      # 保留你原有的步骤：设置 Node 20 + yarn 缓存
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'yarn'
 
+      # 保留你原有的步骤：安装 yarn 依赖
       - name: Install dependencies
         run: yarn install
 
+      # 保留你原有的步骤：构建产物（环境变量不变）
       - name: Build (skip type-check)
         run: yarn build-only prod
         env:
@@ -28,9 +35,31 @@ jobs:
           VITE_BASE_URL: ${{ secrets.VITE_BASE_URL }}
           VITE_WS_URL: ${{ secrets.VITE_WS_URL }}
 
-      - name: Deploy to gh-pages
-        uses: peaceiris/actions-gh-pages@v4
+      # ========== 新增 Docker 相关步骤（核心修改） ==========
+      # 步骤1：设置 Docker Buildx 环境
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # 步骤2：登录到 GHCR（用内置 Token，无需额外配置）
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dist
-          publish_branch: gh-pages
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # 步骤3：构建镜像并推送到 GHCR（基于本地已构建的 dist）
+      - name: Build and push Docker image to GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          # 镜像标签（替换为你的镜像名，保持简洁）
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/vite-dist:latest
+            ghcr.io/${{ github.repository_owner }}/vite-dist:${{ github.sha }}
+          # 缓存加速（可选，大幅提升后续构建速度）
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # 仅复制必要文件（减小镜像体积）
+          file: ./Dockerfile
